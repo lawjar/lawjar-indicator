@@ -1,0 +1,117 @@
+// @version=6
+indicator("MTF Signals — Pivot (Slim) + TF Table (right) - optimized v8", shorttitle="MTF Signals (Slim+TFtable) - optimized v8", overlay=true)
+
+// ===== COPYRIGHT =====
+// Created by: lawjar
+// Date: 2025-10-26
+// Version: v8
+// Description: Multi-Timeframe Signals with Pivot Analysis, Bollinger Bands & Volume Profile POC
+
+// ===== Slimmed inputs =====
+signal_strength = input.int(8, "訊號強度門檻", minval=1, maxval=20, group="基本")
+show_signals    = input.bool(true, "顯示買賣訊號 (標籤/點)", group="基本")
+show_ema        = input.bool(true, "顯示 EMA 9/21 線", group="基本")
+show_volume     = input.bool(true, "顯示成交量", group="基本")
+show_indicator_table = input.bool(true, "顯示 指標時間框表與摘要（右側）", group="基本")
+
+use_macd_bar_color  = input.bool(false, "用 MACD 決定陰陽燭 顏色", group="顯示")
+use_votes_bar_color = input.bool(false, "用 票數 決定陰陽燭 顏色", group="顯示")
+
+// Pivot basics
+pivot_left  = input.int(2, "Pivot Left (bars)", minval=1, group="Pivot")
+pivot_right = input.int(2, "Pivot Right (bars)", minval=1, group="Pivot")
+show_pivots = input.bool(true, "顯示 Pivot (白圓/空心圈)", group="Pivot")
+
+// Strong pivot filters
+vol_ratio_threshold = input.float(1.5, "量能放大門檻 (vol_ratio)", step=0.1, group="Pivot 篩選")
+net_threshold       = input.int(4, "淨強度門檻 (abs(net) >= )", minval=1, group="Pivot 篩選")
+require_follow_through = input.bool(true, "要求即時跟進", group="Pivot 篩選")
+
+// Bollinger Bands
+show_bb = input.bool(true, "顯示 Bollinger Bands", group="Bollinger Bands")
+bb_period = input.int(20, "BB 週期", minval=5, maxval=100, group="Bollinger Bands")
+bb_std_dev = input.float(2.0, "BB 標準差倍數", minval=0.5, maxval=5.0, step=0.1, group="Bollinger Bands")
+
+// Volume Profile POC
+show_vp_poc = input.bool(true, "顯示 Volume Profile POC", group="Volume Profile POC")
+vp_lookback = input.int(50, "VP 回看期數 (bars)", minval=10, maxval=200, group="Volume Profile POC")
+vp_nbins = input.int(24, "VP 箱數 (精度)", minval=10, maxval=50, group="Volume Profile POC")
+
+// ===== Optional votes =====
+include_macd     = input.bool(true, "將 MACD 納入投票", group="額外指標")
+macd_mode = input.string("Traditional", "MACD 模式", options=["Traditional", "Histogram"], group="額外指標")
+include_ema_set1 = input.bool(true, "將 EMA Set 1 納入投票", group="額外指標")
+include_ema_set2 = input.bool(false, "將 EMA Set 2 納入投票", group="額外指標")
+
+show_strength_row = input.bool(true, "顯示『強弱比』列", group="顯示")
+seg_total = input.int(10, "強弱比段數", minval=3, maxval=30, group="顯示")
+table_text_red = input.color(color.rgb(200, 80, 80), "表格用較柔和的紅色", group="顯示")
+
+rsi_upper_threshold = input.int(70, "RSI 上界", minval=50, maxval=80, group="RSI 調整")
+rsi_lower_threshold = input.int(30, "RSI 下界", minval=20, maxval=50, group="RSI 調整")
+
+// Fixed internal defaults
+macd_fast = 12
+macd_slow = 26
+macd_signal_len = 9
+ema1_set_fast = 8
+ema1_set_slow = 21
+ema2_set_fast = 13
+ema2_set_slow = 34
+show_mismatch_pivots = true
+pivot_mismatch_alpha = 0
+
+// Core indicators
+ema9  = ta.ema(close, 9)
+ema21 = ta.ema(close, 21)
+rsi   = ta.rsi(close, 14)
+vol_ma = ta.sma(volume, 20)
+vol_ratio = volume / vol_ma
+
+// Bollinger Bands
+bb_basis = ta.sma(close, bb_period)
+bb_dev = ta.stdev(close, bb_period)
+bb_upper = bb_basis + (bb_std_dev * bb_dev)
+bb_lower = bb_basis - (bb_std_dev * bb_dev)
+price_above_upper = close > bb_upper
+price_below_lower = close < bb_lower
+
+// Volume Profile POC
+vp_high = ta.highest(high, vp_lookback)
+vp_low = ta.lowest(low, vp_lookback)
+vp_range = vp_high - vp_low
+vp_bin_size = vp_range / vp_nbins
+
+var array<float> vp_volumes = array.new<float>(vp_nbins, 0.0)
+var array<float> vp_prices = array.new<float>(vp_nbins, 0.0)
+var float poc_price = na
+var float poc_volume = 0.0
+
+if barstate.islast
+    for i = 0 to vp_nbins - 1
+        array.set(vp_prices, i, vp_low + (i + 0.5) * vp_bin_size)
+        array.set(vp_volumes, i, 0.0)
+    
+    for j = 0 to vp_lookback - 1
+        bar_close = close[j]
+        bar_vol = volume[j]
+        
+        if bar_close >= vp_low and bar_close <= vp_high and vp_bin_size > 0
+            bin_index = int(math.floor((bar_close - vp_low) / vp_bin_size))
+            
+            if bin_index < 0
+                bin_index := 0
+            if bin_index >= vp_nbins
+                bin_index := vp_nbins - 1
+            
+            current_vol = array.get(vp_volumes, bin_index)
+            array.set(vp_volumes, bin_index, current_vol + bar_vol)
+    
+    poc_volume := 0.0
+    poc_price := vp_low
+    
+    for i = 0 to vp_nbins - 1
+        bin_vol = array.get(vp_volumes, i)
+        if bin_vol > poc_volume
+            poc_volume := bin_vol
+            poc_price := array.get(vp_prices, i).
