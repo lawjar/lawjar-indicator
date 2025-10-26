@@ -32,7 +32,7 @@ show_bb = input.bool(true, "顯示 Bollinger Bands", group="Bollinger Bands")
 bb_period = input.int(20, "BB 週期", minval=5, maxval=100, group="Bollinger Bands")
 bb_std_dev = input.float(2.0, "BB 標準差倍數", minval=0.5, maxval=5.0, step=0.1, group="Bollinger Bands")
 
-// Volume Profile POC
+// Volume Profile POC (新功能)
 show_vp_poc = input.bool(true, "顯示 Volume Profile POC", group="Volume Profile POC")
 vp_lookback = input.int(50, "VP 回看期數 (bars)", minval=10, maxval=200, group="Volume Profile POC")
 vp_nbins = input.int(24, "VP 箱數 (精度)", minval=10, maxval=50, group="Volume Profile POC")
@@ -50,7 +50,7 @@ table_text_red = input.color(color.rgb(200, 80, 80), "表格用較柔和的紅�
 rsi_upper_threshold = input.int(70, "RSI 上界", minval=50, maxval=80, group="RSI 調整")
 rsi_lower_threshold = input.int(30, "RSI 下界", minval=20, maxval=50, group="RSI 調整")
 
-// Fixed internal defaults
+// ===== Fixed internal defaults =====
 macd_fast = 12
 macd_slow = 26
 macd_signal_len = 9
@@ -61,14 +61,14 @@ ema2_set_slow = 34
 show_mismatch_pivots = true
 pivot_mismatch_alpha = 0
 
-// Core indicators
+// ===== core indicators =====
 ema9  = ta.ema(close, 9)
 ema21 = ta.ema(close, 21)
 rsi   = ta.rsi(close, 14)
 vol_ma = ta.sma(volume, 20)
 vol_ratio = volume / vol_ma
 
-// Bollinger Bands
+// ===== Bollinger Bands =====
 bb_basis = ta.sma(close, bb_period)
 bb_dev = ta.stdev(close, bb_period)
 bb_upper = bb_basis + (bb_std_dev * bb_dev)
@@ -76,7 +76,7 @@ bb_lower = bb_basis - (bb_std_dev * bb_dev)
 price_above_upper = close > bb_upper
 price_below_lower = close < bb_lower
 
-// Volume Profile POC
+// ===== Volume Profile POC 計算 =====
 vp_high = ta.highest(high, vp_lookback)
 vp_low = ta.lowest(low, vp_lookback)
 vp_range = vp_high - vp_low
@@ -88,10 +88,12 @@ var float poc_price = na
 var float poc_volume = 0.0
 
 if barstate.islast
+    // 初始化箱
     for i = 0 to vp_nbins - 1
         array.set(vp_prices, i, vp_low + (i + 0.5) * vp_bin_size)
         array.set(vp_volumes, i, 0.0)
     
+    // 累積成交量
     for j = 0 to vp_lookback - 1
         bar_close = close[j]
         bar_vol = volume[j]
@@ -107,6 +109,7 @@ if barstate.islast
             current_vol = array.get(vp_volumes, bin_index)
             array.set(vp_volumes, bin_index, current_vol + bar_vol)
     
+    // 找 POC
     poc_volume := 0.0
     poc_price := vp_low
     
@@ -114,4 +117,424 @@ if barstate.islast
         bin_vol = array.get(vp_volumes, i)
         if bin_vol > poc_volume
             poc_volume := bin_vol
-            poc_price := array.get(vp_prices, i).
+            poc_price := array.get(vp_prices, i)
+
+// ===== multi-timeframe: EMA9/EMA21/RSI =====
+[ema1_1m, ema2_1m, rsi_1m]   = request.security(syminfo.tickerid, "1",   [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+[ema1_5m, ema2_5m, rsi_5m]   = request.security(syminfo.tickerid, "5",   [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+[ema1_15m,ema2_15m,rsi_15m]  = request.security(syminfo.tickerid, "15",  [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+[ema1_30m,ema2_30m,rsi_30m]  = request.security(syminfo.tickerid, "30",  [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+[ema1_1h, ema2_1h, rsi_1h]   = request.security(syminfo.tickerid, "60",  [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+[ema1_4h, ema2_4h, rsi_4h]   = request.security(syminfo.tickerid, "240", [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+[ema1_1d, ema2_1d, rsi_1d]   = request.security(syminfo.tickerid, "1D",  [ta.ema(close, 9), ta.ema(close, 21), ta.rsi(close, 14)])
+
+// ===== derive original TF buy/sell =====
+orig_1_b  = close > ema1_1m  and close > ema2_1m  and rsi_1m  < rsi_upper_threshold
+orig_1_s  = close < ema1_1m  and close < ema2_1m  and rsi_1m  > rsi_lower_threshold
+orig_5_b  = close > ema1_5m  and close > ema2_5m  and rsi_5m  < rsi_upper_threshold
+orig_5_s  = close < ema1_5m  and close < ema2_5m  and rsi_5m  > rsi_lower_threshold
+orig_15_b = close > ema1_15m and close > ema2_15m and rsi_15m < rsi_upper_threshold
+orig_15_s = close < ema1_15m and close < ema2_15m and rsi_15m > rsi_lower_threshold
+orig_30_b = close > ema1_30m and close > ema2_30m and rsi_30m < rsi_upper_threshold
+orig_30_s = close < ema1_30m and close < ema2_30m and rsi_30m > rsi_lower_threshold
+orig_1h_b = close > ema1_1h  and close > ema2_1h  and rsi_1h  < rsi_upper_threshold
+orig_1h_s = close < ema1_1h  and close < ema2_1h  and rsi_1h  > rsi_lower_threshold
+orig_4h_b = close > ema1_4h  and close > ema2_4h  and rsi_4h  < rsi_upper_threshold
+orig_4h_s = close < ema1_4h  and close < ema2_4h  and rsi_4h  > rsi_lower_threshold
+orig_1d_b = close > ema1_1d  and close > ema2_1d  and rsi_1d  < rsi_upper_threshold
+orig_1d_s = close < ema1_1d  and close < ema2_1d  and rsi_1d  > rsi_lower_threshold
+
+// ===== compute MACD & EMA set per TF =====
+macd1_l  = request.security(syminfo.tickerid, "1",  ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd1_s  = request.security(syminfo.tickerid, "1",  ta.ema(macd1_l, macd_signal_len))
+macd1_hist = macd1_l - macd1_s
+macd1_hist_prev = request.security(syminfo.tickerid, "1", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+macd5_l  = request.security(syminfo.tickerid, "5",  ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd5_s  = request.security(syminfo.tickerid, "5",  ta.ema(macd5_l, macd_signal_len))
+macd5_hist = macd5_l - macd5_s
+macd5_hist_prev = request.security(syminfo.tickerid, "5", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+macd15_l = request.security(syminfo.tickerid, "15", ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd15_s = request.security(syminfo.tickerid, "15", ta.ema(macd15_l, macd_signal_len))
+macd15_hist = macd15_l - macd15_s
+macd15_hist_prev = request.security(syminfo.tickerid, "15", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+macd30_l = request.security(syminfo.tickerid, "30", ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd30_s = request.security(syminfo.tickerid, "30", ta.ema(macd30_l, macd_signal_len))
+macd30_hist = macd30_l - macd30_s
+macd30_hist_prev = request.security(syminfo.tickerid, "30", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+macd60_l = request.security(syminfo.tickerid, "60", ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd60_s = request.security(syminfo.tickerid, "60", ta.ema(macd60_l, macd_signal_len))
+macd60_hist = macd60_l - macd60_s
+macd60_hist_prev = request.security(syminfo.tickerid, "60", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+macd240_l = request.security(syminfo.tickerid, "240", ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd240_s = request.security(syminfo.tickerid, "240", ta.ema(macd240_l, macd_signal_len))
+macd240_hist = macd240_l - macd240_s
+macd240_hist_prev = request.security(syminfo.tickerid, "240", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+macd1d_l = request.security(syminfo.tickerid, "1D", ta.ema(close, macd_fast) - ta.ema(close, macd_slow))
+macd1d_s = request.security(syminfo.tickerid, "1D", ta.ema(macd1d_l, macd_signal_len))
+macd1d_hist = macd1d_l - macd1d_s
+macd1d_hist_prev = request.security(syminfo.tickerid, "1D", ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len))
+
+// ===== EMA Set 1 & 2 per TF =====
+ema1s1_f   = request.security(syminfo.tickerid, "1",  ta.ema(close, ema1_set_fast))
+ema1s1_s   = request.security(syminfo.tickerid, "1",  ta.ema(close, ema1_set_slow))
+ema1s5_f   = request.security(syminfo.tickerid, "5",  ta.ema(close, ema1_set_fast))
+ema1s5_s   = request.security(syminfo.tickerid, "5",  ta.ema(close, ema1_set_slow))
+ema1s15_f  = request.security(syminfo.tickerid, "15", ta.ema(close, ema1_set_fast))
+ema1s15_s  = request.security(syminfo.tickerid, "15", ta.ema(close, ema1_set_slow))
+ema1s30_f  = request.security(syminfo.tickerid, "30", ta.ema(close, ema1_set_fast))
+ema1s30_s  = request.security(syminfo.tickerid, "30", ta.ema(close, ema1_set_slow))
+ema1s60_f  = request.security(syminfo.tickerid, "60", ta.ema(close, ema1_set_fast))
+ema1s60_s  = request.security(syminfo.tickerid, "60", ta.ema(close, ema1_set_slow))
+ema1s240_f = request.security(syminfo.tickerid, "240",ta.ema(close, ema1_set_fast))
+ema1s240_s = request.security(syminfo.tickerid, "240",ta.ema(close, ema1_set_slow))
+ema1s1d_f  = request.security(syminfo.tickerid, "1D", ta.ema(close, ema1_set_fast))
+ema1s1d_s  = request.security(syminfo.tickerid, "1D", ta.ema(close, ema1_set_slow))
+
+ema2s1_f   = request.security(syminfo.tickerid, "1",  ta.ema(close, ema2_set_fast))
+ema2s1_s   = request.security(syminfo.tickerid, "1",  ta.ema(close, ema2_set_slow))
+ema2s5_f   = request.security(syminfo.tickerid, "5",  ta.ema(close, ema2_set_fast))
+ema2s5_s   = request.security(syminfo.tickerid, "5",  ta.ema(close, ema2_set_slow))
+ema2s15_f  = request.security(syminfo.tickerid, "15", ta.ema(close, ema2_set_fast))
+ema2s15_s  = request.security(syminfo.tickerid, "15", ta.ema(close, ema2_set_slow))
+ema2s30_f  = request.security(syminfo.tickerid, "30", ta.ema(close, ema2_set_fast))
+ema2s30_s  = request.security(syminfo.tickerid, "30", ta.ema(close, ema2_set_slow))
+ema2s60_f  = request.security(syminfo.tickerid, "60", ta.ema(close, ema2_set_fast))
+ema2s60_s  = request.security(syminfo.tickerid, "60", ta.ema(close, ema2_set_slow))
+ema2s240_f = request.security(syminfo.tickerid, "240",ta.ema(close, ema2_set_fast))
+ema2s240_s = request.security(syminfo.tickerid, "240",ta.ema(close, ema2_set_slow))
+ema2s1d_f  = request.security(syminfo.tickerid, "1D", ta.ema(close, ema2_set_fast))
+ema2s1d_s  = request.security(syminfo.tickerid, "1D", ta.ema(close, ema2_set_slow))
+
+// ===== derive buy/sell for each tf indicator =====
+macd1_b = macd_mode == "Histogram" ? (macd1_hist > 0 and macd1_hist > macd1_hist_prev) : (macd1_l > macd1_s)
+macd1_sg = macd_mode == "Histogram" ? (macd1_hist < 0 and macd1_hist < macd1_hist_prev) : (macd1_l < macd1_s)
+macd5_b = macd_mode == "Histogram" ? (macd5_hist > 0 and macd5_hist > macd5_hist_prev) : (macd5_l > macd5_s)
+macd5_sg = macd_mode == "Histogram" ? (macd5_hist < 0 and macd5_hist < macd5_hist_prev) : (macd5_l < macd5_s)
+macd15_b = macd_mode == "Histogram" ? (macd15_hist > 0 and macd15_hist > macd15_hist_prev) : (macd15_l > macd15_s)
+macd15_sg = macd_mode == "Histogram" ? (macd15_hist < 0 and macd15_hist < macd15_hist_prev) : (macd15_l < macd15_s)
+macd30_b = macd_mode == "Histogram" ? (macd30_hist > 0 and macd30_hist > macd30_hist_prev) : (macd30_l > macd30_s)
+macd30_sg = macd_mode == "Histogram" ? (macd30_hist < 0 and macd30_hist < macd30_hist_prev) : (macd30_l < macd30_s)
+macd60_b = macd_mode == "Histogram" ? (macd60_hist > 0 and macd60_hist > macd60_hist_prev) : (macd60_l > macd60_s)
+macd60_sg = macd_mode == "Histogram" ? (macd60_hist < 0 and macd60_hist < macd60_hist_prev) : (macd60_l < macd60_s)
+macd240_b = macd_mode == "Histogram" ? (macd240_hist > 0 and macd240_hist > macd240_hist_prev) : (macd240_l > macd240_s)
+macd240_sg = macd_mode == "Histogram" ? (macd240_hist < 0 and macd240_hist < macd240_hist_prev) : (macd240_l < macd240_s)
+macd1d_b = macd_mode == "Histogram" ? (macd1d_hist > 0 and macd1d_hist > macd1d_hist_prev) : (macd1d_l > macd1d_s)
+macd1d_sg = macd_mode == "Histogram" ? (macd1d_hist < 0 and macd1d_hist < macd1d_hist_prev) : (macd1d_l < macd1d_s)
+
+ema1_1_b = ema1s1_f > ema1s1_s
+ema1_1_s = ema1s1_f < ema1s1_s
+ema1_5_b = ema1s5_f > ema1s5_s
+ema1_5_s = ema1s5_f < ema1s5_s
+ema1_15_b = ema1s15_f > ema1s15_s
+ema1_15_s = ema1s15_f < ema1s15_s
+ema1_30_b = ema1s30_f > ema1s30_s
+ema1_30_s = ema1s30_f < ema1s30_s
+ema1_60_b = ema1s60_f > ema1s60_s
+ema1_60_s = ema1s60_f < ema1s60_s
+ema1_240_b = ema1s240_f > ema1s240_s
+ema1_240_s = ema1s240_f < ema1s240_s
+ema1_1d_b = ema1s1d_f > ema1s1d_s
+ema1_1d_s = ema1s1d_f < ema1s1d_s
+
+ema2_1_b = ema2s1_f > ema2s1_s
+ema2_1_s = ema2s1_f < ema2s1_s
+ema2_5_b = ema2s5_f > ema2s5_s
+ema2_5_s = ema2s5_f < ema2s5_s
+ema2_15_b = ema2s15_f > ema2s15_s
+ema2_15_s = ema2s15_f < ema2s15_s
+ema2_30_b = ema2s30_f > ema2s30_s
+ema2_30_s = ema2s30_f < ema2s30_s
+ema2_60_b = ema2s60_f > ema2s60_s
+ema2_60_s = ema2s60_f < ema2s60_s
+ema2_240_b = ema2s240_f > ema2s240_s
+ema2_240_s = ema2s240_f < ema2s240_s
+ema2_1d_b = ema2s1d_f > ema2s1d_s
+ema2_1d_s = ema2s1d_f < ema2s1d_s
+
+// ===== direction votes from optional indicators =====
+macdLine_curr = ta.ema(close, macd_fast) - ta.ema(close, macd_slow)
+macdSignal_curr = ta.ema(macdLine_curr, macd_signal_len)
+macdHist_curr = macdLine_curr - macdSignal_curr
+macdHist_prev = ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow) - ta.ema(ta.ema(close[1], macd_fast) - ta.ema(close[1], macd_slow), macd_signal_len)
+
+macd_bull = macd_mode == "Histogram" ? (macdHist_curr > 0 and macdHist_curr > macdHist_prev) : (macdLine_curr > macdSignal_curr)
+macd_bear = macd_mode == "Histogram" ? (macdHist_curr < 0 and macdHist_curr < macdHist_prev) : (macdLine_curr < macdSignal_curr)
+
+ema1s_fast = ta.ema(close, ema1_set_fast)
+ema1s_slow = ta.ema(close, ema1_set_slow)
+ema1s_bull = ema1s_fast > ema1s_slow
+ema1s_bear = ema1s_fast < ema1s_slow
+
+ema2s_fast = ta.ema(close, ema2_set_fast)
+ema2s_slow = ta.ema(close, ema2_set_slow)
+ema2s_bull = ema2s_fast > ema2s_slow
+ema2s_bear = ema2s_fast < ema2s_slow
+
+macd_vote_bull = include_macd and macd_bull ? 1 : 0
+macd_vote_bear = include_macd and macd_bear ? 1 : 0
+ema1_vote_bull = include_ema_set1 and ema1s_bull ? 1 : 0
+ema1_vote_bear = include_ema_set1 and ema1s_bear ? 1 : 0
+ema2_vote_bull = include_ema_set2 and ema2s_bull ? 1 : 0
+ema2_vote_bear = include_ema_set2 and ema2s_bear ? 1 : 0
+
+// ===== compose bull / bear signals =====
+vol_bonus_bull = (vol_ratio > vol_ratio_threshold and close > open) ? 1 : 0
+vol_bonus_bear = (vol_ratio > vol_ratio_threshold and close < open) ? 1 : 0
+
+bull_signals = (orig_1_b  ? 1 : 0) + (orig_5_b ? 1 : 0) + (orig_15_b ? 1 : 0) + (orig_30_b ? 1 : 0) + (orig_1h_b ? 1 : 0) + (orig_4h_b ? 1 : 0) + (orig_1d_b ? 1 : 0) + vol_bonus_bull + macd_vote_bull + ema1_vote_bull + ema2_vote_bull
+bear_signals = (orig_1_s  ? 1 : 0) + (orig_5_s ? 1 : 0) + (orig_15_s ? 1 : 0) + (orig_30_s ? 1 : 0) + (orig_1h_s ? 1 : 0) + (orig_4h_s ? 1 : 0) + (orig_1d_s ? 1 : 0) + vol_bonus_bear + macd_vote_bear + ema1_vote_bear + ema2_vote_bear
+
+strong_buy  = bull_signals >= signal_strength
+strong_sell = bear_signals >= signal_strength
+
+net = bull_signals - bear_signals
+net_up_onset   = (net > 0) and (net[1] <= 0)
+net_down_onset = (net < 0) and (net[1] >= 0)
+
+var int cooldown = 0
+cooldown_bars = input.int(2, "Cooldown bars", minval=0, maxval=50, group="訊號控制")
+
+allow_signal = cooldown == 0
+show_bull_point = allow_signal and net_up_onset and (bull_signals > bear_signals)
+show_bear_point = allow_signal and net_down_onset and (bear_signals > bull_signals)
+
+strong_buy_onset_raw  = strong_buy  and not strong_buy[1]
+strong_sell_onset_raw = strong_sell and not strong_sell[1]
+strong_buy_allowed  = allow_signal and strong_buy_onset_raw  and (bull_signals > bear_signals)
+strong_sell_allowed = allow_signal and strong_sell_onset_raw and (bear_signals > bull_signals)
+
+if (show_bull_point or show_bear_point or strong_buy_allowed or strong_sell_allowed)
+    cooldown := cooldown_bars
+else if cooldown > 0
+    cooldown := cooldown - 1
+
+// ===== pivots visualization =====
+ph = ta.pivothigh(high, pivot_left, pivot_right)
+pl = ta.pivotlow(low, pivot_left, pivot_right)
+pivot_high_confirmed = not na(ph)
+pivot_low_confirmed  = not na(pl)
+
+pivot_high_direction_ok = pivot_high_confirmed and ( (bear_signals[pivot_right] > bull_signals[pivot_right]) or strong_sell[pivot_right] )
+pivot_low_direction_ok  = pivot_low_confirmed  and ( (bull_signals[pivot_right] > bear_signals[pivot_right]) or strong_buy[pivot_right] )
+
+vol_ok_at_pivot = vol_ratio[pivot_right] > vol_ratio_threshold
+net_ok_at_pivot = math.abs(net[pivot_right]) >= net_threshold
+strong_ok_at_pivot = (pivot_high_confirmed and strong_sell[pivot_right]) or (pivot_low_confirmed and strong_buy[pivot_right])
+
+follow_through_high = close < ph
+follow_through_low  = close > pl
+
+pivot_high_strength = (vol_ok_at_pivot ? 1 : 0) + (strong_ok_at_pivot? 1 : 0) + (net_ok_at_pivot? 1 : 0)
+pivot_low_strength = (vol_ok_at_pivot ? 1 : 0) + (strong_ok_at_pivot? 1 : 0) + (net_ok_at_pivot? 1 : 0)
+
+ph_strong_3 = pivot_high_direction_ok and (pivot_high_strength == 3) and (not require_follow_through or follow_through_high)
+pl_strong_3 = pivot_low_direction_ok and (pivot_low_strength == 3) and (not require_follow_through or follow_through_low)
+
+ph_strong_2 = pivot_high_direction_ok and (pivot_high_strength == 2) and (not require_follow_through or follow_through_high)
+pl_strong_2 = pivot_low_direction_ok and (pivot_low_strength == 2) and (not require_follow_through or follow_through_low)
+
+ph_strong_1 = pivot_high_direction_ok and (pivot_high_strength == 1) and (not require_follow_through or follow_through_high)
+pl_strong_1 = pivot_low_direction_ok and (pivot_low_strength == 1) and (not require_follow_through or follow_through_low)
+
+mismatch_high_strength = pivot_high_confirmed and not pivot_high_direction_ok ? math.abs(bear_signals[pivot_right] - bull_signals[pivot_right]) : 0
+mismatch_low_strength = pivot_low_confirmed and not pivot_low_direction_ok ? math.abs(bull_signals[pivot_right] - bear_signals[pivot_right]) : 0
+
+ph_mismatch_2 = pivot_high_confirmed and not pivot_high_direction_ok and (mismatch_high_strength >= 3)
+pl_mismatch_2 = pivot_low_confirmed and not pivot_low_direction_ok and (mismatch_low_strength >= 3)
+
+// ===== plotting =====
+plot(show_ema ? ema9 : na, "EMA 9", color=color.yellow, linewidth=1)
+plot(show_ema ? ema21 : na, "EMA 21", color=color.orange, linewidth=1)
+
+plotshape(show_signals and show_bull_point, title="Net up", location=location.belowbar, style=shape.circle, size=size.tiny, color=color.new(color.green,0))
+plotshape(show_signals and show_bear_point, title="Net down", location=location.abovebar, style=shape.circle, size=size.tiny, color=color.new(color.red,0))
+plotshape(show_signals and strong_buy_allowed, title="Strong BUY", location=location.belowbar, style=shape.labelup, size=size.normal, color=color.new(color.green,0), text="BUY", textcolor=color.white)
+plotshape(show_signals and strong_sell_allowed, title="Strong SELL", location=location.abovebar, style=shape.labeldown, size=size.normal, color=color.new(color.red,0), text="SELL", textcolor=color.white)
+
+// ===== Bollinger Bands =====
+plot(show_bb ? bb_upper : na, title="BB Upper", color=color.new(color.navy, 10), linewidth=1)
+plot(show_bb ? bb_basis : na, title="BB Basis", color=color.new(color.gray, 60), linewidth=1)
+plot(show_bb ? bb_lower : na, title="BB Lower", color=color.new(color.navy, 10), linewidth=1)
+fill(plot(show_bb ? bb_upper : na, display=display.none), plot(show_bb ? bb_lower : na, display=display.none), color=color.new(color.blue, 90), title="BB Fill")
+
+// ===== Volume Profile POC (紫色) =====
+plot(show_vp_poc and not na(poc_price) ? poc_price : na, title="Volume Profile POC", color=color.new(color.purple, 0), linewidth=2, style=plot.style_linebr)
+
+// ===== Pivot 強度視覺 =====
+plot(show_pivots and ph_strong_3 ? ph : na, title="Pivot High ⭐⭐⭐", color=color.white, style=plot.style_circles, linewidth=8, offset=-pivot_right)
+plot(show_pivots and ph_strong_2 ? ph : na, title="Pivot High ⭐⭐", color=color.white, style=plot.style_circles, linewidth=5, offset=-pivot_right)
+plot(show_pivots and ph_strong_1 ? ph : na, title="Pivot High ⭐", color=color.white, style=plot.style_circles, linewidth=2, offset=-pivot_right)
+
+plot(show_pivots and pl_strong_3 ? pl : na, title="Pivot Low ⭐⭐⭐", color=color.white, style=plot.style_circles, linewidth=8, offset=-pivot_right)
+plot(show_pivots and pl_strong_2 ? pl : na, title="Pivot Low ⭐⭐", color=color.white, style=plot.style_circles, linewidth=5, offset=-pivot_right)
+plot(show_pivots and pl_strong_1 ? pl : na, title="Pivot Low ⭐", color=color.white, style=plot.style_circles, linewidth=2, offset=-pivot_right)
+
+mismatch_color = color.new(color.white, pivot_mismatch_alpha)
+
+if show_pivots and show_mismatch_pivots
+    if ph_mismatch_2
+        label.new(bar_index - pivot_right, ph, text="○", 
+                  xloc=xloc.bar_index, yloc=yloc.price,
+                  style=label.style_none, textcolor=mismatch_color, size=size.small)
+    if pl_mismatch_2
+        label.new(bar_index - pivot_right, pl, text="○", 
+                  xloc=xloc.bar_index, yloc=yloc.price,
+                  style=label.style_none, textcolor=mismatch_color, size=size.small)
+
+plot(show_pivots and show_mismatch_pivots == false and pivot_high_direction_ok and not (ph_strong_3 or ph_strong_2 or ph_strong_1) ? ph : na, 
+     title="Pivot High small", color=color.white, style=plot.style_circles, linewidth=3, offset=-pivot_right)
+plot(show_pivots and show_mismatch_pivots == false and pivot_low_direction_ok and not (pl_strong_3 or pl_strong_2 or pl_strong_1) ? pl : na, 
+     title="Pivot Low small", color=color.white, style=plot.style_circles, linewidth=3, offset=-pivot_right)
+
+// ===== Table =====
+curr = timeframe.period
+curr_label = curr == "1" ? "M1" : curr == "5" ? "M5" : curr == "15" ? "M15" : curr == "30" ? "M30" : (curr == "60" or curr == "1H") ? "H1" : (curr == "240" or curr == "4H") ? "H4" : (curr == "1D" or curr == "D") ? "D1" : ""
+
+max_votes = 7 + 1 + (include_macd ? 1 : 0) + (include_ema_set1 ? 1 : 0) + (include_ema_set2 ? 1 : 0)
+pct_bull = max_votes > 0 ? int(100 * bull_signals / max_votes) : 0
+pct_bear = max_votes > 0 ? int(100 * bear_signals / max_votes) : 0
+
+bar_col = use_votes_bar_color ? (bull_signals > bear_signals ? color.new(color.green, 0) : bear_signals > bull_signals ? color.new(color.red, 0) : color.new(color.gray, 0)) :
+          use_macd_bar_color  ? (macd_bull ? color.new(color.green, 0) : macd_bear ? color.new(color.red, 0) : na) : na
+barcolor(bar_col)
+
+plot(show_volume ? volume : na, title="Volume", color=vol_ratio > vol_ratio_threshold ? color.green : color.gray, style=plot.style_columns, display=display.pane)
+plot(show_volume ? vol_ma : na, title="Vol MA", color=color.yellow, display=display.pane)
+
+f_text(buy, sell) => buy ? "買" : sell ? "賣" : "中"
+f_col(buy, sell) => buy ? color.green : sell ? table_text_red : color.white
+
+tf_cols = 8
+tf_rows = show_strength_row ? 16 : 15
+var table right_tbl = table.new(position.top_right, tf_cols, tf_rows, bgcolor=color.new(color.black, 80), border_width=1)
+
+votes_text = "多: " + str.tostring(bull_signals) + "/" + str.tostring(max_votes) + " (" + str.tostring(pct_bull) + "%)\n空: " + str.tostring(bear_signals) + "/" + str.tostring(max_votes) + " (" + str.tostring(pct_bear) + "%)"
+
+red_segs = 0
+green_segs = 0
+neutral_segs = 0
+if max_votes > 0
+    green_segs := int(math.floor(bull_signals * seg_total / math.max(1, max_votes)))
+    red_segs   := int(math.floor(bear_signals * seg_total / math.max(1, max_votes)))
+    neutral_segs := seg_total - green_segs - red_segs
+
+if neutral_segs < 0
+    neutral_segs := 0
+if red_segs < 0
+    red_segs := 0
+if green_segs < 0
+    green_segs := 0
+
+if bull_signals > 0 and pct_bull > 0 and pct_bull < 10 and green_segs == 0
+    green_segs := 1
+    neutral_segs := seg_total - green_segs - red_segs
+    if neutral_segs < 0
+        neutral_segs := 0
+
+if bear_signals > 0 and pct_bear > 0 and pct_bear < 10 and red_segs == 0
+    red_segs := 1
+    neutral_segs := seg_total - green_segs - red_segs
+    if neutral_segs < 0
+        neutral_segs := 0
+
+green_str = str.repeat("🟩", green_segs)
+red_str   = str.repeat("🟥", red_segs)
+neutral_str = str.repeat("⬜", neutral_segs)
+bar_label = green_str + red_str + neutral_str
+
+debug_text = ""
+
+if barstate.islast and show_indicator_table
+    table.clear(right_tbl, 0, 0, tf_cols - 1, tf_rows - 1)
+
+    table.cell(right_tbl, 0, 0, "指標\\TF", text_color=color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 1, 0, "M1",  text_color = (curr_label == "M1") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 2, 0, "M5",  text_color = (curr_label == "M5") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 3, 0, "M15", text_color = (curr_label == "M15") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 4, 0, "M30", text_color = (curr_label == "M30") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 5, 0, "H1",  text_color = (curr_label == "H1") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 6, 0, "H4",  text_color = (curr_label == "H4") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+    table.cell(right_tbl, 7, 0, "D1",  text_color = (curr_label == "D1") ? color.orange : color.white, bgcolor=color.new(color.gray, 50))
+
+    table.cell(right_tbl, 0, 1, "MACD", text_color=include_macd ? color.white : color.new(color.gray, 50), bgcolor=color.new(color.gray,30))
+    table.cell(right_tbl, 1, 1, f_text(macd1_b, macd1_sg), text_color=f_col(macd1_b, macd1_sg))
+    table.cell(right_tbl, 2, 1, f_text(macd5_b, macd5_sg), text_color=f_col(macd5_b, macd5_sg))
+    table.cell(right_tbl, 3, 1, f_text(macd15_b, macd15_sg), text_color=f_col(macd15_b, macd15_sg))
+    table.cell(right_tbl, 4, 1, f_text(macd30_b, macd30_sg), text_color=f_col(macd30_b, macd30_sg))
+    table.cell(right_tbl, 5, 1, f_text(macd60_b, macd60_sg), text_color=f_col(macd60_b, macd60_sg))
+    table.cell(right_tbl, 6, 1, f_text(macd240_b, macd240_sg), text_color=f_col(macd240_b, macd240_sg))
+    table.cell(right_tbl, 7, 1, f_text(macd1d_b, macd1d_sg), text_color=f_col(macd1d_b, macd1d_sg))
+
+    table.cell(right_tbl, 0, 2, "EMA Set1", text_color=include_ema_set1 ? color.white : color.new(color.gray, 50), bgcolor=color.new(color.gray,30))
+    table.cell(right_tbl, 1, 2, f_text(ema1_1_b, ema1_1_s), text_color=f_col(ema1_1_b, ema1_1_s))
+    table.cell(right_tbl, 2, 2, f_text(ema1_5_b, ema1_5_s), text_color=f_col(ema1_5_b, ema1_5_s))
+    table.cell(right_tbl, 3, 2, f_text(ema1_15_b, ema1_15_s), text_color=f_col(ema1_15_b, ema1_15_s))
+    table.cell(right_tbl, 4, 2, f_text(ema1_30_b, ema1_30_s), text_color=f_col(ema1_30_b, ema1_30_s))
+    table.cell(right_tbl, 5, 2, f_text(ema1_60_b, ema1_60_s), text_color=f_col(ema1_60_b, ema1_60_s))
+    table.cell(right_tbl, 6, 2, f_text(ema1_240_b, ema1_240_s), text_color=f_col(ema1_240_b, ema1_240_s))
+    table.cell(right_tbl, 7, 2, f_text(ema1_1d_b, ema1_1d_s), text_color=f_col(ema1_1d_b, ema1_1d_s))
+
+    table.cell(right_tbl, 0, 3, "EMA Set2", text_color=include_ema_set2 ? color.white : color.new(color.gray, 50), bgcolor=color.new(color.gray,30))
+    table.cell(right_tbl, 1, 3, f_text(ema2_1_b, ema2_1_s), text_color=f_col(ema2_1_b, ema2_1_s))
+    table.cell(right_tbl, 2, 3, f_text(ema2_5_b, ema2_5_s), text_color=f_col(ema2_5_b, ema2_5_s))
+    table.cell(right_tbl, 3, 3, f_text(ema2_15_b, ema2_15_s), text_color=f_col(ema2_15_b, ema2_15_s))
+    table.cell(right_tbl, 4, 3, f_text(ema2_30_b, ema2_30_s), text_color=f_col(ema2_30_b, ema2_30_s))
+    table.cell(right_tbl, 5, 3, f_text(ema2_60_b, ema2_60_s), text_color=f_col(ema2_60_b, ema2_60_s))
+    table.cell(right_tbl, 6, 3, f_text(ema2_240_b, ema2_240_s), text_color=f_col(ema2_240_b, ema2_240_s))
+    table.cell(right_tbl, 7, 3, f_text(ema2_1d_b, ema2_1d_s), text_color=f_col(ema2_1d_b, ema2_1d_s))
+
+    for c = 0 to 7
+        table.cell(right_tbl, c, 4, " ", text_color=color.white, bgcolor=color.new(color.gray,10))
+
+    table.cell(right_tbl, 0, 5, "EMA9/21(RSI)", text_color=color.white, bgcolor=color.new(color.gray,40))
+    table.cell(right_tbl, 1, 5, f_text(orig_1_b, orig_1_s), text_color=f_col(orig_1_b, orig_1_s))
+    table.cell(right_tbl, 2, 5, f_text(orig_5_b, orig_5_s), text_color=f_col(orig_5_b, orig_5_s))
+    table.cell(right_tbl, 3, 5, f_text(orig_15_b, orig_15_s), text_color=f_col(orig_15_b, orig_15_s))
+    table.cell(right_tbl, 4, 5, f_text(orig_30_b, orig_30_s), text_color=f_col(orig_30_b, orig_30_s))
+    table.cell(right_tbl, 5, 5, f_text(orig_1h_b, orig_1h_s), text_color=f_col(orig_1h_b, orig_1h_s))
+    table.cell(right_tbl, 6, 5, f_text(orig_4h_b, orig_4h_s), text_color=f_col(orig_4h_b, orig_4h_s))
+    table.cell(right_tbl, 7, 5, f_text(orig_1d_b, orig_1d_s), text_color=f_col(orig_1d_b, orig_1d_s))
+
+    table.cell(right_tbl, 0, 6, "當前 MACD", text_color=include_macd ? color.white : color.new(color.gray, 50), bgcolor=color.new(color.gray, 40))
+    table.cell(right_tbl, 1, 6, macd_bull ? "買" : macd_bear ? "賣" : "中", text_color=macd_bull ? color.green : macd_bear ? table_text_red : color.white, bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 7, "當前 EMA1", text_color=include_ema_set1 ? color.white : color.new(color.gray, 50), bgcolor=color.new(color.gray, 40))
+    table.cell(right_tbl, 1, 7, ema1s_bull ? "買" : ema1s_bear ? "賣" : "中", text_color=ema1s_bull ? color.green : ema1s_bear ? table_text_red : color.white, bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 8, "當前 EMA2", text_color=include_ema_set2 ? color.white : color.new(color.gray, 50), bgcolor=color.new(color.gray, 40))
+    table.cell(right_tbl, 1, 8, ema2s_bull ? "買" : ema2s_bear ? "賣" : "中", text_color=ema2s_bull ? color.green : ema2s_bear ? table_text_red : color.white, bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 9, "成交量", text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(right_tbl, 1, 9, vol_ratio > vol_ratio_threshold ? "放量" : "正常", text_color=vol_ratio > vol_ratio_threshold ? color.green : color.white, bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 10, "BB 狀態", text_color=color.white, bgcolor=color.new(color.gray, 40))
+    bb_status = price_above_upper ? "超買🔴" : price_below_lower ? "超賣🟢" : "帶內⚪"
+    bb_status_color = price_above_upper ? color.new(color.red, 0) : price_below_lower ? color.new(color.green, 0) : color.new(color.white, 0)
+    table.cell(right_tbl, 1, 10, bb_status, text_color=bb_status_color, bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 11, "POC 價格", text_color=color.white, bgcolor=color.new(color.gray, 40))
+    poc_text = not na(poc_price) ? str.tostring(poc_price, "#.00") : "N/A"
+    table.cell(right_tbl, 1, 11, poc_text, text_color=color.new(color.purple, 0), bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 12, "票數", text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(right_tbl, 1, 12, votes_text, text_color=bull_signals>bear_signals ? color.green : bear_signals>bull_signals ? table_text_red : color.white, bgcolor=color.new(color.gray,20))
+
+    table.cell(right_tbl, 0, 13, "強度", text_color=color.white, bgcolor=color.new(color.gray, 40))
+    table.cell(right_tbl, 1, 13, str.tostring(bull_signals) + " vs " + str.tostring(bear_signals), text_color=bull_signals>bear_signals ? color.green : bear_signals>bull_signals ? table_text_red : color.white, bgcolor=color.new(color.gray,20))
+
+    if show_strength_row
+        table.cell(right_tbl, 0, 14, "強弱比", text_color=color.white, bgcolor=color.new(color.gray, 40))
+        table.cell(right_tbl, 1, 14, bar_label, text_color=color.white, bgcolor=color.new(color.gray,10))
+        for c = 2 to 7
+            table.cell(right_tbl, c, 14, " ", text_color=color.white, bgcolor=color.new(color.gray,10))
+
+alertcondition(strong_buy, title="強買訊號", message="Strong BUY triggered")
+alertcondition(strong_sell, title="強賣訊號", message="Strong SELL triggered")
+alertcondition(price_above_upper, title="BB 超買", message="Price above BB Upper Band")
+alertcondition(price_below_lower, title="BB 超賣", message="Price below BB Lower Band")
