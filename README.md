@@ -1,35 +1,220 @@
-# MTF Signals v8 Indicator
+# MTF Signals v8 — 多時間框訊號指標
 
-## Features
-- Multi-Timeframe analysis capability
-- Customizable signal alerts
-- User-friendly interface
-- Supports various trading strategies
-- Optimized for both manual and automated trading
+## 📊 指標簡介
 
-## Usage Guide
-1. **Installation**: Download the MTF Signals v8 indicator from the repository.
-2. **Activation**: Place the indicator file into the appropriate directory of your trading platform.
-3. **Configuration**: Adjust the settings according to your trading preferences.
+**MTF Signals v8** 是一個專為短線交易設計的多時間框架 (MTF) 技術分析指標。
 
-## Trading Examples
-- **Example 1**: Using MTF Signals in a trending market.
-- **Example 2**: How to set alerts for potential reversal points.
-- **Example 3**: Combining MTF Signals with other indicators for enhanced decision-making.
+結合了：
+- 🟣 **Volume Profile POC** - 找密集成交區
+- 📊 **Bollinger Bands** - 超買/超賣判斷  
+- ⭕ **Pivot 分析** - 高概率轉勢點
+- 🎯 **多時間框訊號** - 7 個時間框同時分析
+- 📈 **實時表格** - 一目了然的指標狀態
 
-## FAQ
-- **Q: How do I install the indicator?**
-  A: Follow the installation steps mentioned in the Usage Guide.
+---
 
-- **Q: What platforms is MTF Signals compatible with?**
-  A: The indicator is compatible with most popular trading platforms.
+## 🎯 核心功能
 
-- **Q: Can I customize the alerts?**
-  A: Yes, you can customize alerts based on your trading strategy.
+### 🟣 Volume Profile POC（紫色線）
 
-## Setup Instructions
-1. Download the indicator files.
-2. Open your trading platform.
-3. Navigate to the indicators section and import the MTF Signals v8 indicator.
-4. Configure the settings according to your trading needs.
-5. Start using the indicator to enhance your trading experience.
+**作用：** 找出最近 50 根 bar 內成交量最集中的價格位置
+
+**用途：**
+- ✅ 支撐/阻力預測
+- ✅ 訂單密集區識別  
+- ✅ 反彈/下跌目標位
+
+**參數：**
+- `VP 回看期數` - 預設 50 根（可調 10-200）
+- `VP 箱數` - 預設 24 個箱（精度調整，10-50）
+
+---
+
+### 📊 Bollinger Bands（BB）
+
+**作用：** 判斷價格是否超買或超賣
+
+| 狀態 | 含義 | 顏色 |
+|------|------|------|
+| 🔴 超買 | price > BB Upper | 紅色 |
+| 🟢 超賣 | price < BB Lower | 綠色 |
+| ⚪ 帶內 | 在帶內 | 灰色 |
+
+**參數：**
+- `BB 週期` - 預設 20（可調 5-100）
+- `BB 標準差倍數` - 預設 2.0（可調 0.5-5.0）
+
+---
+
+### ⭕ Pivot 分析（白圓 + 空心圈）
+
+#### 白圓（順勢 = 好訊號）
+
+```
+⭕⭕⭕ 大白圈（3 顆星）：3 個條件都滿足 → 最優先交易
+⭕⭕ 中白圈（2 顆星）：2 個條件滿足 → 可信度中等
+⭕ 小白圈（1 顆星）：1 個條件滿足 → 作為參考
+```
+
+**3 個條件：**
+1. ✅ 成交量放大（vol_ratio > 1.5）
+2. ✅ 有強買/賣訊號
+3. ✅ 淨強度高（abs(net) >= 4）
+
+#### 空心圈（逆勢 = 虛假訊號）
+
+```
+○ 空心圈：假見頂/底 → ⚠️ 避免逆勢交易
+```
+
+---
+
+### 🎯 多時間框訊號（右側表格）
+
+表格自動分析 **7 個時間框**：
+
+| TF | 說明 |
+|---|---|
+| M1 | 1 分鐘 |
+| M5 | 5 分鐘 |
+| M15 | **15 分鐘（當前 TF 會高亮橙色）** |
+| M30 | 30 分鐘 |
+| H1 | 1 小時 |
+| H4 | 4 小時 |
+| D1 | 1 天 |
+
+**表格行數說明：**
+- **MACD** → 每個 TF 的 MACD 狀態（買/賣/中）
+- **EMA Set1** → EMA(8/21) 快線 > 慢線 = 買
+- **EMA Set2** → EMA(13/34) 快線 > 慢線 = 買
+- **EMA9/21(RSI)** → 原始指標（close > EMA9/21 & RSI 未超買）
+- **當前 MACD/EMA1/EMA2** → 當前 TF 的狀態
+- **成交量** → 成交量放大判斷
+- **BB 狀態** → 超買/超賣/帶內
+- **POC 價格** → Volume Profile POC 價格
+- **票數** → 多頭/空頭票數
+- **強度** → 買方票數 vs 空方票數
+- **強弱比** → 視覺化柱狀圖（🟩🟥⬜）
+
+---
+
+### 💡 買賣訊號（標籤 + 點點）
+
+#### 🟢 綠色小點（弱訊號）
+- 位置：bar 下方
+- 含義：多頭開始或維持
+- 動作：可考慮買入或加倉
+
+#### 🔴 紅色小點（弱訊號）
+- 位置：bar 上方
+- 含義：空頭開始或維持
+- 動作：可考慮賣出或減倉
+
+#### 🟢 BUY 標籤（強訊號）
+- 位置：bar 下方
+- 含義：**票數 >= 8** + 新的多頭轉變
+- 動作：**強烈買入訊號** ⭐⭐⭐
+- 配合大白圈效果更佳
+
+#### 🔴 SELL 標籤（強訊號）
+- 位置：bar 上方
+- 含義：**票數 >= 8** + 新的空頭轉變
+- 動作：**強烈賣出訊號** ⭐⭐⭐
+- 配合大白圈效果更佳
+
+---
+
+## 📋 使用指南 - 3 步快速開始
+
+### 步驟 1：載入指標
+
+1. 開啟 **TradingView**
+2. 選擇 **BTC/USDT** 圖表，**15 分鐘 (M15)** 時間框
+3. 點選 **Pine Editor**
+4. 貼上 `MTF_Signals_Pivot_TFTable_optimized_v8.pine` 代碼
+5. 按 **Add to Chart**
+
+### 步驟 2：設定參數（推薦不改）
+
+```
+訊號強度門檻 = 8
+Pivot Left/Right = 2
+量能放大門檻 = 1.5
+淨強度門檻 = 4
+BB 週期 = 20
+BB 標準差 = 2.0
+```
+
+### 步驟 3：開始交易
+
+等待 **BUY/SELL 標籤** 出現 → 結合白圓 + BB 狀態 → 進場交易
+
+---
+
+## 🎯 交易邏輯
+
+### 🟢 買入訊號
+
+```
+最優先（把握率最高）：
+  ✅ 見到 ⭕⭕⭕ 大白圈（見底）
+  ✅ 同時出現 🟢 BUY 標籤
+  ✅ Bollinger Bands 顯示 🟢 超賣
+  ✅ POC 紫線附近或支撐位
+
+買入策略：
+  1. 等大白圈 + BUY 標籤同時出現
+  2. 檢查 BB 狀態（優先超賣）
+  3. 看 POC 是否在支撐位附近
+  4. 檢查表格多頭票數 > 空頭票數
+  5. 進場買入
+```
+
+### 🔴 賣出訊號
+
+```
+最優先（把握率最高）：
+  ✅ 見到 ⭕⭕⭕ 大白圈（見頂）
+  ✅ 同時出現 🔴 SELL 標籤
+  ✅ Bollinger Bands 顯示 🔴 超買
+  ✅ POC 紫線附近或阻力位
+
+賣出策略：
+  1. 等大白圈 + SELL 標籤同時出現
+  2. 檢查 BB 狀態（優先超買）
+  3. 看 POC 是否在阻力位附近
+  4. 檢查表格空頭票數 > 多頭票數
+  5. 進場賣出
+```
+
+---
+
+## ⚠️ 避免情況 - 虛假訊號識別
+
+```
+❌ 空心圈 ○ 出現 → 虛假訊號，不交易
+❌ 只有小白圈 ⭕ → 確認度低，等待更強訊號
+❌ BB 帶內 ⚪ → 波動不明顯，暫停交易
+❌ POC 無明顯支撐/阻力 → 參考價值降低
+❌ 多/空票數接近 → 方向不明，等待確認
+```
+
+---
+
+## 🎯 交易案例
+
+### ✅ 成功案例：強買訊號
+
+```
+時間：BTC M15 圖表
+狀況：
+  ✅ 見到 ⭕⭕⭕ 大白圈（見底）
+  ✅ 同時出現 🟢 BUY 標籤
+  ✅ BB 顯示 🟢 超賣（price < BB Lower）
+  ✅ POC 紫線在支撐位
+  ✅ 表格多頭票數：8/11（73%）
+
+決策：強烈買入 ⭐⭐⭐
+進場：市價買入或在 POC 位 limit 單
+止損：設在
+
